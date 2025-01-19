@@ -1,6 +1,10 @@
 import discord
 from discord import app_commands
 from db.database import get_sold_positions
+import os
+
+AUTHORIZED_CHANNEL_ID = int(os.getenv("AUTHORIZED_CHANNEL_ID", 0))
+TARGET_CHANNEL_ID = int(os.getenv("TARGET_CHANNEL_ACTIVE_POS", 0))
 
 
 class SoldPositions(discord.ext.commands.Cog):
@@ -10,6 +14,15 @@ class SoldPositions(discord.ext.commands.Cog):
     @app_commands.command(name="avslutade",
                           description="Visa alla avslutade positioner.")
     async def avslutade(self, interaction: discord.Interaction):
+        # Kontrollera om kommandot körs i den auktoriserade kanalen
+        if interaction.channel_id != AUTHORIZED_CHANNEL_ID:
+            await interaction.response.send_message(
+                "Detta kommando kan endast användas i den auktoriserade kanalen.",  # noqa: E501
+                ephemeral=True
+            )
+            return
+
+        # Hämta avslutade positioner
         positions = get_sold_positions()
         if positions:
             total_result = 0  # Variabel för att summera resultatet
@@ -25,7 +38,26 @@ class SoldPositions(discord.ext.commands.Cog):
 
             # Lägg till totalen i meddelandet
             response += f"\nTotalt resultat: {total_result:.2f}%"
-            await interaction.response.send_message(f"```{response}```")
+            response = f"```{response}```"
+
+            # Skicka resultatet till målkanalen
+            target_channel = interaction.client.get_channel(TARGET_CHANNEL_ID)
+            if target_channel:
+                await target_channel.send(response)
+                # Bekräfta för användaren att resultatet skickades
+                await interaction.response.send_message(
+                    "Avslutade positioner skickades till målkanalen.",
+                    ephemeral=True
+                )
+            else:
+                # Om målkanalen inte hittas
+                await interaction.response.send_message(
+                    "Målkanalen kunde inte hittas. Kontrollera kanalinställningarna.",  # noqa: E501
+                    ephemeral=True
+                )
         else:
+            # Om inga avslutade positioner finns
             await interaction.response.send_message(
-                "Inga avslutade positioner hittades.")
+                "Inga avslutade positioner hittades.",
+                ephemeral=True
+            )
